@@ -80,3 +80,7 @@ def main() -> None:
     # test_asyncio_backend()
     create_gui()
     test_ioc()
+
+
+if __name__ == "__main__":
+    main()
