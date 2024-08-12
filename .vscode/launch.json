@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug temp controller",
+            "name": "TempController Sim",
             "type": "python",
             "request": "launch",
             "module": "tickit",
@@ -14,6 +14,23 @@
                 "all",
                 "${workspaceFolder}/src/demo_fast_cs/simulation/temp_controller.yaml"
             ],
+            "purpose": [
+                "debug-test"
+            ],
+            "console": "integratedTerminal",
+            "env": {
+                // The default config in pyproject.toml's "[tool.pytest.ini_options]" adds coverage.
+                // Cannot have coverage and debugging at the same time.
+                // https://github.com/microsoft/vscode-python/issues/693
+                "PYTEST_ADDOPTS": "--no-cov"
+            },
+        },
+        {
+            "name": "TempController IOC",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/demo_fast_cs/demo.py",
+            "justMyCode": false,
             "purpose": [
                 "debug-test"
             ],

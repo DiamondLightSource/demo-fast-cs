@@ -1,19 +1,19 @@
 import logging
 import traceback
-from dataclasses import dataclass
 from os import _exit
 
 import numpy as np
 import numpy.typing as npt
-from tickit.adapters.composed import ComposedAdapter
-from tickit.adapters.interpreters.command import CommandInterpreter
-from tickit.adapters.interpreters.command.regex_command import RegexCommand
-from tickit.adapters.interpreters.wrappers import SplittingInterpreter
-from tickit.adapters.servers.tcp import ByteFormat, TcpServer
+import pydantic.v1.dataclasses
+from tickit.adapters.io import TcpIo
+from tickit.adapters.specifications.regex_command import RegexCommand
+from tickit.adapters.tcp import CommandAdapter
+from tickit.core.adapter import AdapterContainer
 from tickit.core.components.component import Component, ComponentConfig
-from tickit.core.components.device_simulation import DeviceSimulation
+from tickit.core.components.device_component import DeviceComponent
 from tickit.core.device import Device, DeviceUpdate
 from tickit.core.typedefs import SimTime
+from tickit.utils.byte_format import ByteFormat
 from typing_extensions import TypedDict
 
 
@@ -35,8 +35,11 @@ def handle_exceptions(func):
 
 
 class TempControllerDevice(Device):
-    Inputs: type = TypedDict("Inputs", {"flux": float})
-    Outputs: type = TypedDict("Outputs", {"flux": float})
+    class Inputs(TypedDict):
+        flux: float
+
+    class Outputs(TypedDict):
+        flux: float
 
     def __init__(
         self,
@@ -105,19 +108,13 @@ class TempControllerDevice(Device):
         return DeviceUpdate(TempControllerDevice.Outputs(flux=inputs["flux"]), call_at)
 
 
-class TempControllerAdapter(ComposedAdapter):
+class TempControllerAdapter(CommandAdapter):
     device: TempControllerDevice
+    _byte_format: ByteFormat = ByteFormat(b"%b\r\n")
 
-    def __init__(
-        self,
-        host: str = "localhost",
-        port: int = 25565,
-    ) -> None:
-        super().__init__(
-            TcpServer(host, port, ByteFormat(b"%b\r\n")),
-            SplittingInterpreter(CommandInterpreter(), message_delimiter=b"\n"),
-            # CommandInterpreter(),
-        )
+    def __init__(self, device: TempControllerDevice) -> None:
+        super().__init__()
+        self.device = device
 
     def _validate_index(self, index: str) -> int:
         int_index = int(index) - 1
@@ -172,7 +169,7 @@ class TempControllerAdapter(ComposedAdapter):
         pass
 
 
-@dataclass
+@pydantic.v1.dataclasses.dataclass
 class TempController(ComponentConfig):
     num_ramp_controllers: int
     default_start: float = 0
@@ -181,12 +178,18 @@ class TempController(ComponentConfig):
     port: int = 25565
 
     def __call__(self) -> Component:
-        return DeviceSimulation(
+        device = TempControllerDevice(
+            num_ramp_controllers=self.num_ramp_controllers,
+            default_start=self.default_start,
+            default_end=self.default_end,
+        )
+        return DeviceComponent(
             name=self.name,
-            device=TempControllerDevice(
-                num_ramp_controllers=self.num_ramp_controllers,
-                default_start=self.default_start,
-                default_end=self.default_end,
-            ),
-            adapters=[TempControllerAdapter(host=self.host, port=self.port)],
+            device=device,
+            adapters=[
+                AdapterContainer(
+                    TempControllerAdapter(device),
+                    TcpIo(self.host, self.port),
+                )
+            ],
         )

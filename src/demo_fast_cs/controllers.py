@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -41,6 +42,7 @@ class TempControllerHandler:
         response = await controller.conn.send_query(
             f"{self.name}{controller.suffix}?\r\n"
         )
+
         if attr.dtype is bool:
             await attr.set(int(response))
         else:
@@ -48,7 +50,7 @@ class TempControllerHandler:
 
 
 class TempController(Controller):
-    ramp_rate = AttrRW(Float(), handler=TempControllerHandler("R"))
+    ramp_rate = AttrRW(Float(), handler=TempControllerHandler("R"), group="Config")
 
     def __init__(self, settings: TempControllerSettings) -> None:
         super().__init__()
@@ -63,10 +65,12 @@ class TempController(Controller):
             self._ramp_controllers.append(controller)
             self.register_sub_controller(controller)
 
-    @command
+    @command()
     async def cancel_all(self) -> None:
         for rc in self._ramp_controllers:
             await rc.enabled.process(False)
+            # TODO: The requests all get concatenated if they are sent too quickly?
+            await asyncio.sleep(0.1)
 
     async def connect(self) -> None:
         await self.conn.connect(self._settings.ip_settings)
@@ -76,12 +80,12 @@ class TempController(Controller):
 
 
 class TempRampController(SubController):
-    start = AttrRW(Int(), handler=TempControllerHandler("S"))
-    end = AttrRW(Int(), handler=TempControllerHandler("E"))
-    current = AttrR(Float(prec=3), handler=TempControllerHandler("T"))
+    start = AttrRW(Int(), handler=TempControllerHandler("S"), group="Config")
+    end = AttrRW(Int(), handler=TempControllerHandler("E"), group="Config")
+    current = AttrR(Float(prec=3), handler=TempControllerHandler("T"), group="Status")
     enabled = AttrRW(Bool(znam="Off", onam="On"), handler=TempControllerHandler("N"))
 
     def __init__(self, index: int, conn: IPConnection) -> None:
         self.suffix = f"{index:02d}"
-        super().__init__(f"ramp{self.suffix}")
+        super().__init__(f"Ramp{self.suffix}")
         self.conn = conn
